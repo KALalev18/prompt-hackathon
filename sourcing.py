@@ -1,7 +1,6 @@
 import re
 from datetime import datetime, timezone
 from statistics import median
-
 from googleapiclient.discovery import build
 
 EU_MARKETS = {
@@ -109,10 +108,6 @@ def _video_categories(title, description=""):
     return list(dict.fromkeys(categories))
 
 
-def _content_categories(text):
-    return _video_categories(text)
-
-
 def _extract_public_contact(description):
     email_matches = re.findall(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", description, flags=re.IGNORECASE)
     url_matches = re.findall(r"https?://[^\s<>\])]+", description, flags=re.IGNORECASE)
@@ -159,6 +154,23 @@ def _refresh_video_metrics(creator):
         100 * sum(video.get("likes", 0) + video.get("comments", 0) for video in measured_videos) / total_views,
         2,
     ) if total_views else None
+
+    # Commercial saturation and gambling detection
+    sponsor_terms = ("sponsor", "sponsored", "ad ", "advertisement", "werbung", "anzeige", "promo code", "discount code")
+    gambling_terms = ("cs2 cases", "case opening", "betting", "csgo roll", "csgoroll", "casino", "gamble", "lootbox")
+    
+    sponsored_count = 0
+    has_gambling = False
+    
+    for video in measured_videos:
+        text = f"{video.get('title', '')} {video.get('description', '')}".lower()
+        if any(term in text for term in sponsor_terms):
+            sponsored_count += 1
+        if any(term in text for term in gambling_terms):
+            has_gambling = True
+            
+    creator["commercial_saturation"] = f"{sponsored_count} in {len(measured_videos)} sponsored" if measured_videos else "Unknown"
+
     subscriber_count = creator.get("subscribers")
     creator["avg_views_to_subscribers_pct"] = round(100 * creator["avg_recent_video_views"] / subscriber_count, 2) if creator["avg_recent_video_views"] is not None and subscriber_count else None
     creator["recent_30d_uploads"] = len(uploads_30d)
@@ -181,6 +193,8 @@ def _refresh_video_metrics(creator):
     ) if total_views else None
 
     risk_flags = []
+    if has_gambling:
+        risk_flags.append("High-risk: Gambling or CS2 case opening promotions detected")
     if creator["last_upload_days"] is not None and creator["last_upload_days"] > 90:
         risk_flags.append("No public upload in the last 90 days")
     if len(dated_videos) >= 5 and creator["niche_match_ratio_pct"] < 20:

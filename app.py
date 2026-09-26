@@ -129,6 +129,7 @@ if st.button("Load / refresh dataset", type="primary") or load_saved_on_open:
                     results = []
                     candidates = creators
                     for creator in candidates:
+                        
                         platform = creator.get("platform", "YouTube")
                         analysis = score_and_draft_pitch(
                             "",
@@ -167,6 +168,9 @@ if st.button("Load / refresh dataset", type="primary") or load_saved_on_open:
                             "Subscribers / followers": subscribers,
                             "Size tier": size_tier,
                             "Core target match": is_core_youtube or (platform == "TikTok" and subscribers is not None and subscribers >= 4000),
+                            # --- ADD THE NEW FIELDS HERE ---
+                            "Commercial saturation": creator.get("commercial_saturation", "Unknown"),
+                            "Verified Email": "✅ Yes" if creator.get("public_contact_email") else "❌ No",
                             "Channel total views": creator.get("channel_total_views"),
                             "Channel video count": creator.get("channel_video_count"),
                             "Avg video views": average_views,
@@ -298,10 +302,10 @@ if results:
         df = df.sort_values("Avg video views", ascending=False, na_position="last")
 
     display_columns = [
-        "Platform", "Creator", "Handle", "Declared country", "Markets discovered",
-        "Subscribers / followers", "Size tier", "Avg video views", "Median video views",
-        "Views window (days)", "Views sample size", "PC build match", "Gaming match",
-        "Content niche", "Game titles", "Trend status", "Risk/review flags", "Channel",
+        "Platform", "Creator", "Handle", "Declared country",
+        "Subscribers / followers", "Avg video views", "PC build match", "Gaming match",
+        "Content niche", "Game titles", "Commercial saturation", "Verified Email", 
+        "Trend status", "Risk/review flags", "Channel",
     ]
     st.dataframe(
         df[display_columns],
