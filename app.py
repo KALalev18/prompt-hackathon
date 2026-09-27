@@ -14,18 +14,149 @@ from platform_imports import TIKTOK_CSV_TEMPLATE, INSTAGRAM_CSV_TEMPLATE, load_p
 
 st.set_page_config(layout="wide", page_title="Prenew Micro-Scout")
 
-# Inject Prenew branding CSS
-# Inject Prenew branding CSS
 st.markdown("""
 <style>
-    h1, h2, h3, p, span, div {
-        font-family: 'Inter', sans-serif;
+    /* Main background */
+    .stApp {
+        background-color: #13603d; 
+        color: #ffffff;
     }
-    /* Prenew Green primary buttons */
-    .stButton>button[kind="primary"] {
-        background-color: #17cf74 !important;
+    
+    /* 1. White background with dark text for ALL inputs, dropdowns, uploaders */
+    .stTextInput input, 
+    .stTextArea textarea, 
+    .stSelectbox div[data-baseweb="select"] > div,
+    .stMultiSelect div[data-baseweb="select"] > div,
+    [data-testid="stFileUploaderDropzone"] {
+        background-color: #ffffff !important;
+        border: 1px solid #ffffff !important;
+        color: #000000 !important; 
+        border-radius: 8px !important;
+    }
+
+    /* Force text inside the drag-and-drop uploader to be dark */
+    [data-testid="stFileUploaderDropzone"] div,
+    [data-testid="stFileUploaderDropzone"] span,
+    [data-testid="stFileUploaderDropzone"] small {
         color: #000000 !important;
+    }
+
+    /* --- OVERRIDE: White Checkboxes (Ticks) --- */
+    div[data-baseweb="checkbox"] div[role="checkbox"] {
+        background-color: #ffffff !important; 
+        border: 2px solid #ffffff !important;
+    }
+    /* The actual tick mark inside the box */
+    div[data-baseweb="checkbox"] div[role="checkbox"] svg {
+        color: #000000 !important; /* Black tick */
+        fill: #000000 !important;
+    }
+    
+    /* --- OVERRIDE: White Data Tables with Black Text --- */
+    [data-testid="stDataFrame"] > div > div > div > div {
+        background-color: #ffffff !important;
+    }
+    
+    /* Table Headers */
+    [data-testid="stDataFrame"] th {
+        background-color: #f8f9fa !important; /* Slightly off-white for headers */
+        color: #000000 !important; /* Black text */
+        border-bottom: 1px solid #dee2e6 !important;
+    }
+    
+    /* Table Cells (Rows) */
+    [data-testid="stDataFrame"] td {
+        background-color: #ffffff !important; /* Pure white */
+        color: #000000 !important; /* Black text */
+        border-bottom: 1px solid #f1f3f5 !important;
+    }
+    
+    /* 2. Fix the dark buttons: Standard, Download, and Browse Files buttons */
+    .stButton > button,
+    .stDownloadButton > button,
+    [data-testid="stFileUploaderDropzone"] button {
+        background-color: #ffffff !important;
+        border: 1px solid #ffffff !important;
+        color: #000000 !important;
+        border-radius: 8px !important;
+    }
+    .stButton > button p, 
+    .stDownloadButton > button p {
+        color: #000000 !important;
+    }
+    
+    /* Primary action buttons get the solid fill ("Buy a PC" style) */
+    .stButton > button[kind="primary"] {
+        background-color: #a4ffa2 !important; 
+        color: #13603d !important;
         border: none !important;
+        font-weight: 700 !important;
+    }
+    .stButton > button[kind="primary"] p {
+        color: #13603d !important;
+    }
+    
+    /* 3. Make the success message box RED */
+    [data-testid="stAlert"] {
+        background-color: #d93838 !important; /* Vibrant Red */
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stAlert"] div, [data-testid="stAlert"] span, [data-testid="stAlert"] p {
+        color: #ffffff !important;
+    }
+
+    /* Fix Radio Buttons from being dark holes */
+    div[role="radio"] {
+        background-color: #ffffff !important;
+    }
+
+    /* Make placeholder text dark grey to contrast with the white background */
+    .stTextInput input::placeholder, 
+    .stTextArea textarea::placeholder,
+    .stSelectbox div[class*="placeholder"], 
+    .stMultiSelect div[class*="placeholder"] {
+        color: #666666 !important;
+    }
+    
+    /* Ensure dropdown text and icons remain dark */
+    .stSelectbox span, .stMultiSelect span {
+        color: #000000 !important;
+    }
+    
+    /* Containers and Expanders get a matching subtle white frame */
+    [data-testid="stExpander"], [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: transparent !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        border-radius: 8px !important;
+    }
+
+    /* Make the Dataframe/Table White with Black Text */
+    [data-testid="stDataFrame"] > div > div > div > div {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+    }
+    
+    /* Ensure table headers are also white/black */
+    [data-testid="stDataFrame"] th {
+        background-color: #f8f9fa !important;
+        color: #000000 !important;
+        border-bottom: 1px solid #dee2e6 !important;
+    }
+    
+    /* Ensure table cells (rows) have dark text and subtle borders */
+    [data-testid="stDataFrame"] td {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        border-bottom: 1px solid #f1f3f5 !important;
+    } 
+    
+    /* Fix alignment to push content left and use full width */
+    .block-container {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+        max-width: 100% !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -96,19 +227,22 @@ with top_col2:
     gemini_api_key = configured_secret("GEMINI_API_KEY")
 
     provider_csv = None
+    
+    # Only draw the upload UI if a CSV mode is actually selected
     if is_csv_upload:
-        st.caption("Upload commercial discovery data for automated fit-scoring.")
-        provider_csv = st.file_uploader(f"Upload {source_mode.split()[0]} CSV", type=["csv"], label_visibility="collapsed")
-        
-        template_data = INSTAGRAM_CSV_TEMPLATE if from_instagram else TIKTOK_CSV_TEMPLATE
-        file_prefix = "instagram" if from_instagram else "tiktok"
-        
-        st.download_button(
-            f"Download {source_mode.split()[0]} template",
-            data=template_data.encode("utf-8"),
-            file_name=f"prenew_{file_prefix}_provider_template.csv",
-            mime="text/csv",
-        )
+        with st.container():
+            st.caption("Upload commercial discovery data for automated fit-scoring.")
+            provider_csv = st.file_uploader(f"Upload {source_mode.split()[0]} CSV", type=["csv"], label_visibility="collapsed")
+            
+            template_data = INSTAGRAM_CSV_TEMPLATE if from_instagram else TIKTOK_CSV_TEMPLATE
+            file_prefix = "instagram" if from_instagram else "tiktok"
+            
+            st.download_button(
+                f"Download {source_mode.split()[0]} template",
+                data=template_data.encode("utf-8"),
+                file_name=f"prenew_{file_prefix}_provider_template.csv",
+                mime="text/csv",
+            )
 
 if st.session_state.get("active_source_mode") != source_mode:
     st.session_state.pop("creator_results", None)
@@ -303,10 +437,10 @@ if results:
         st.info(f"No creators match '{niche_query}'. Clear the search to show the full dataset.")
         st.stop()
     with st.container(border=True):
-        st.markdown("##### 🎛️ Refine & Filter Dataset")
+        st.markdown("##### Refine & Filter Dataset")
         f_col1, f_col2, f_col3 = st.columns(3)
         country_filter = f_col1.selectbox("Country", ["All countries", *EU_MARKETS.keys()])
-        size_filter = f_col2.selectbox("Audience size", ["All sizes", "Core targets only", "Emerging YouTube (<50k)", "Large YouTube (>250k)"])
+        size_filter = f_col2.selectbox("Audience size", ["All sizes", "Micro-creators (< 10k)", "Emerging (10k - 50k)", "Established (50k - 250k)", "Large (> 250k)"])
         view_filter = f_col3.selectbox("Average views", ["Any", "20k-100k core range", "Below 20k", "Above 100k"])
         
         f_col4, f_col5 = st.columns(2)
@@ -330,10 +464,14 @@ if results:
         ]
     if size_filter == "Core targets only":
         df = df[df["Core target match"]]
-    elif size_filter == "Emerging YouTube (<50k)":
-        df = df[(df["Platform"] == "YouTube") & (df["Subscribers / followers"] < 50000)]
-    elif size_filter == "Large YouTube (>250k)":
-        df = df[(df["Platform"] == "YouTube") & (df["Subscribers / followers"] > 250000)]
+    if size_filter == "Micro-creators (< 10k)":
+        df = df[df["Subscribers / followers"] < 10000]
+    elif size_filter == "Emerging (10k - 50k)":
+        df = df[df["Subscribers / followers"].between(10000, 49999)]
+    elif size_filter == "Established (50k - 250k)":
+        df = df[df["Subscribers / followers"].between(50000, 250000)]
+    elif size_filter == "Large (> 250k)":
+        df = df[df["Subscribers / followers"] > 250000]
     if view_filter == "20k-100k core range":
         df = df[df["Avg video views"].between(20000, 100000)]
     elif view_filter == "Below 20k":
@@ -383,29 +521,55 @@ if results:
     kpi2.metric("Core Target Fits", len(df[df["Core target match"]]))
     kpi3.metric("Verified Emails Found", len(df[df["Verified Email"] == "Yes"]))
     kpi4.metric("PC Build Channels", len(df[df["PC build match"]]))
+    
     st.write("")
-
-    display_columns = [
-        "Avatar", "Platform", "Creator", "Handle", "Declared country",
-        "Subscribers / followers", "Avg video views", "PC build match", "Gaming match",
-        "Content niche", "Game titles", "Commercial saturation", "Verified Email", 
-        "Trend status", "Risk/review flags", "Channel",
+    
+    # Define essential columns shown by default
+    core_columns = [
+        "Platform", "Creator", "Declared country",
+        "Subscribers / followers", "Avg video views", "Content niche", "Verified Email"
     ]
+    
+    # Define optional columns that are hidden by default
+    optional_columns = [
+        "Handle", "PC build match", "Gaming match", "Game titles", 
+        "Commercial saturation", "Trend status", "Risk/review flags", "Channel"
+    ]
+    
+    # Render checkboxes in a compact 4-column grid
+    st.markdown("**Add columns to table**")
+    selected_extras = []
+    chk_cols = st.columns(4)
+    for i, col_name in enumerate(optional_columns):
+        if chk_cols[i % 4].checkbox(col_name):
+            selected_extras.append(col_name)
+    
+    # Combine core columns with the user's selections
+    display_columns = core_columns + selected_extras
+
     st.dataframe(
         df[display_columns],
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Avatar": st.column_config.ImageColumn("Avatar"),
             "Channel": st.column_config.LinkColumn("Channel")
         },
     )
-
     st.divider()
-    selected_creator = st.selectbox("Select a creator to review and prepare outreach", df["Creator"].tolist())
-    selected = df[df["Creator"] == selected_creator].iloc[0]
     
-    st.markdown(f"### Profile: {selected_creator}")
+    # Create a formatted label for the dropdown that includes the subscriber count
+    df["_Dropdown_Label"] = df.apply(
+        lambda r: f"{r['Creator']} ({int(r['Subscribers / followers']):,} subs)" 
+        if pd.notna(r['Subscribers / followers']) else r['Creator'], 
+        axis=1
+    )
+    
+    selected_label = st.selectbox("Select a creator to review and prepare outreach", df["_Dropdown_Label"].tolist())
+    selected = df[df["_Dropdown_Label"] == selected_label].iloc[0]
+    selected_creator = selected["Creator"]
+    
+    # Make the profile header a clickable hyperlink pointing to their channel
+    st.markdown(f"### Profile: [{selected_creator}]({selected['Channel']})")
     
     # Split into a clean 2-column dashboard layout
     detail_left, detail_right = st.columns([1, 1.2], gap="large")
@@ -437,7 +601,10 @@ if results:
             col6.metric("Last 3 Months", f"{selected.get('Avg Views (Last 3m)', 0):,.0f}")
 
     with detail_right:
-        st.text_area(f"Outreach Draft ({market})", selected["Outreach draft"], height=160)
+        # Append the website URL to the draft text dynamically
+        draft_with_link = selected["Outreach draft"] + "\n\nhttps://www.prenew.com/"
+        
+        st.text_area(f"Outreach Draft ({market})", draft_with_link, height=320)
         st.caption("Editable suggestion. Verify the channel and contact method before outreach.")
         
         if gemini_api_key:

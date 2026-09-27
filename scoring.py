@@ -26,10 +26,11 @@ def _local_analysis(creator_data, language):
     name = creator_data.get("name", "")
     
     # C2B / Trade-in angle in pitches
+    # C2B / Trade-in angle in pitches
     pitches = {
-        "de": f"Hallo liebes Team von {name}, eure Inhalte zu {evidence} passen gut zu Prenew. Wir verkaufen gepruefte, refurbished Gaming-PCs mit Garantie und kaufen auch gebrauchte Setups an. Haettet ihr Interesse, einen PC zu testen oder eurer Community zu zeigen, wie einfach sie ihr altes Setup an uns verkaufen koennen?",
-        "en": f"Hello {name} team, your content about {evidence} looks highly relevant to Prenew. We sell quality-checked refurbished gaming PCs and also buy used rigs for cash. Would you be interested in testing a PC, or showing your audience how easily they can sell their old setups to us when upgrading?",
-        "fi": f"Hei {name} tiimi, sisältönne aiheesta {evidence} sopii hyvin Prenewille. Myymme tarkistettuja kunnostettuja pelitietokoneita ja ostamme myös käytettyjä koneita. Kiinnostaisiko teitä testata tietokonetta tai esitellä yleisöllenne, kuinka helposti he voivat myydä vanhan koneensa meille?",
+        "de": f"Hallo {name},\n\nich verfolge eure Inhalte rund um {evidence} schon eine Weile und finde sie wirklich spannend. Ich melde mich im Namen von Prenew - wir sind eine europäische Plattform für generalüberholte Gaming-PCs mit Garantie, und wir kaufen auch gebrauchte Setups an.\n\nDa Hardware und Gaming genau euer Thema ist, wollten wir fragen, ob ihr offen für eine Zusammenarbeit wärt? Entweder um eines unserer Systeme zu testen, oder um eurer Community zu zeigen, wie einfach man sein altes Setup bei einem Upgrade zu Geld machen kann.\n\nBeste Grüße,\nDas Prenew-Team",
+        "en": f"Hi {name},\n\nI've been following your recent content, especially around {evidence}, and wanted to reach out. I'm with Prenew—we're a European platform that buys used gaming PCs, refurbishes them, and sells them with a full warranty.\n\nWe’re looking for creators who really understand hardware and gaming to test our rigs or show their community how easy it is to trade in their old setups for cash. Would you be open to discussing a potential partnership?\n\nBest,\nThe Prenew Team",
+        "fi": f"Hei {name},\n\nOlen seurannut sisältöänne ({evidence}) ja halusin olla yhteydessä. Edustan Prenewiä – eurooppalaista alustaa, joka ostaa käytettyjä pelitietokoneita, kunnostaa ne ja myy täydellä takuulla.\n\nEtsimme tekijöitä, jotka todella ymmärtävät laitteiston päälle, testaamaan koneitamme tai näyttämään yhteisölleen, kuinka helppoa vanhojen laitteiden vaihtaminen rahaksi on. Olisitteko avoimia keskustelemaan mahdollisesta yhteistyöstä?\n\nYstävällisin terveisin,\nPrenew-tiimi",
     }
     return {
         "brand_fit_score": round(score),
@@ -62,7 +63,7 @@ def score_and_draft_pitch(gemini_api_key, creator_data, language="de"):
     
     Task:
     1. Score content fit from 1-100 using explicit PC builds, hardware, reviews, and gaming evidence. Discuss game titles as topics, not as evidence of audience age.
-    2. Write a 3-sentence casual outreach message in fluent {requested_language} proposing a partnership. You MUST mention that we both SELL refurbished PCs and BUY old PCs for cash. Ask if they want to test a PC or show their audience how to sell their old rig for an upgrade.
+    2. Write a highly professional, authentic, and personalized outreach email in fluent {requested_language} proposing a partnership. Avoid marketing buzzwords; sound like a real person reaching out. Use line breaks for paragraphs to make it look like a real email. You MUST mention that we both SELL refurbished PCs and BUY old PCs for cash. Ask if they want to test a rig or show their audience how to sell their old setup to us for an upgrade. Always sign off with "The Prenew Team" and include "prenew.com".
     
     Return ONLY a JSON object with keys: "brand_fit_score", "reasoning", "outreach_pitch".
     """
