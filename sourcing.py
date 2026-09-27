@@ -135,6 +135,9 @@ def _refresh_video_metrics(creator):
 
     uploads_30d = [video for video in dated_videos if video["age_days"] <= 30]
     uploads_90d = [video for video in dated_videos if video["age_days"] <= 90]
+    uploads_91_180d = [video for video in dated_videos if 90 < video["age_days"] <= 180]
+    uploads_181_270d = [video for video in dated_videos if 180 < video["age_days"] <= 270]
+    
     window_days = 30 if len(uploads_30d) >= 3 else 90
     cohort = uploads_30d if window_days == 30 else uploads_90d
     measured_videos = [video for video in cohort if video.get("views", 0) >= 0]
@@ -154,6 +157,18 @@ def _refresh_video_metrics(creator):
         100 * sum(video.get("likes", 0) + video.get("comments", 0) for video in measured_videos) / total_views,
         2,
     ) if total_views else None
+
+    # Historical 3, 6, 9-month stats
+    def _avg(vids):
+        measured = [v for v in vids if v.get("views", 0) >= 0]
+        return round(sum(v["views"] for v in measured) / len(measured), 1) if measured else 0
+
+    creator["uploads_3m"] = len(uploads_90d)
+    creator["uploads_6m"] = len(uploads_91_180d)
+    creator["uploads_9m"] = len(uploads_181_270d)
+    creator["avg_views_3m"] = _avg(uploads_90d)
+    creator["avg_views_6m"] = _avg(uploads_91_180d)
+    creator["avg_views_9m"] = _avg(uploads_181_270d)
 
     # Commercial saturation and gambling detection
     sponsor_terms = ("sponsor", "sponsored", "ad ", "advertisement", "werbung", "anzeige", "promo code", "discount code")
@@ -252,10 +267,12 @@ def _discover_youtube_creators(youtube, keyword, region_code, language, country_
         channel_url = f"https://www.youtube.com/{custom_url}" if custom_url else f"https://youtube.com/channel/{channel['id']}"
         public_contact = _extract_public_contact(snippet.get("description", ""))
         seed_videos = videos_by_channel.get(channel["id"], [])
+        
         candidates.append({
             "channel_id": channel["id"],
             "name": snippet.get("title", "Unknown channel"),
             "description": snippet.get("description", ""),
+            "profile_image_url": snippet.get("thumbnails", {}).get("default", {}).get("url"),
             "subscribers": subscriber_count,
             "subscriber_count_hidden": bool(statistics.get("hiddenSubscriberCount", False)),
             "channel_total_views": int(statistics.get("viewCount", 0)),
@@ -286,7 +303,7 @@ def _enrich_from_uploads(youtube, creators, progress_callback=None):
                 response = youtube.playlistItems().list(
                     part="snippet,contentDetails",
                     playlistId=uploads_playlist_id,
-                    maxResults=50,
+                    maxResults=200,
                 ).execute()
                 for item in response.get("items", []):
                     snippet = item.get("snippet", {})
@@ -415,6 +432,7 @@ def get_fallback_creators():
         {
             "name": "Demo: BerlinerTechZocker",
             "description": "PC Builds, Benchmarks und Hardware Reviews. Valorant & CS:GO.",
+            "profile_image_url": "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y",
             "subscribers": 12500,
             "channel_total_views": None,
             "channel_video_count": None,
@@ -425,6 +443,12 @@ def get_fallback_creators():
             "recent_30d_uploads": None,
             "upload_frequency_per_month_90d": None,
             "observed_monthly_view_growth": None,
+            "uploads_3m": 12,
+            "uploads_6m": 8,
+            "uploads_9m": 15,
+            "avg_views_3m": 25000,
+            "avg_views_6m": 22000,
+            "avg_views_9m": 18000,
             "url": "https://youtube.com/",
             "content_categories": ["PC builds", "Hardware and benchmarks", "Gaming"],
             "recent_videos": [],
@@ -432,6 +456,7 @@ def get_fallback_creators():
         {
             "name": "Demo: SimRacing DE",
             "description": "Alles rund um Sim Racing und Setup-Optimierung.",
+            "profile_image_url": "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y",
             "subscribers": 34000,
             "channel_total_views": None,
             "channel_video_count": None,
@@ -442,25 +467,14 @@ def get_fallback_creators():
             "recent_30d_uploads": None,
             "upload_frequency_per_month_90d": None,
             "observed_monthly_view_growth": None,
+            "uploads_3m": 5,
+            "uploads_6m": 6,
+            "uploads_9m": 4,
+            "avg_views_3m": 15000,
+            "avg_views_6m": 18000,
+            "avg_views_9m": 12000,
             "url": "https://youtube.com/",
             "content_categories": ["Gaming setups", "Gaming"],
-            "recent_videos": [],
-        },
-        {
-            "name": "Demo: HardwareCheck Klein",
-            "description": "Budget PC-Hardware, Grafikkarten-Tests und Benchmarks für Einsteiger.",
-            "subscribers": 42500,
-            "channel_total_views": None,
-            "channel_video_count": None,
-            "avg_recent_video_views": None,
-            "avg_recent_video_likes": None,
-            "avg_recent_video_comments": None,
-            "recent_video_engagement_rate": None,
-            "recent_30d_uploads": None,
-            "upload_frequency_per_month_90d": None,
-            "observed_monthly_view_growth": None,
-            "url": "https://youtube.com/",
-            "content_categories": ["Hardware and benchmarks", "Reviews and buying advice"],
             "recent_videos": [],
         },
     ]

@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 import tomllib
+from datetime import datetime, timezone
 from pathlib import Path
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -12,6 +13,22 @@ from metrics_history import save_and_measure_snapshots
 from platform_imports import TIKTOK_CSV_TEMPLATE, INSTAGRAM_CSV_TEMPLATE, load_provider_csv, load_saved_youtube_dataset
 
 st.set_page_config(layout="wide", page_title="Prenew Micro-Scout")
+
+# Inject Prenew branding CSS
+# Inject Prenew branding CSS
+st.markdown("""
+<style>
+    h1, h2, h3, p, span, div {
+        font-family: 'Inter', sans-serif;
+    }
+    /* Prenew Green primary buttons */
+    .stButton>button[kind="primary"] {
+        background-color: #17cf74 !important;
+        color: #000000 !important;
+        border: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 def configured_secret(name):
     try:
@@ -129,6 +146,45 @@ if st.button("Load / refresh dataset", type="primary") or load_saved_on_open:
                     results = []
                     candidates = creators
                     for creator in candidates:
+                        results = []
+                    candidates = creators
+                    now_utc = datetime.now(timezone.utc)
+                    
+                    for creator in candidates:
+                        # Convert the saved CSV text string back into a usable list
+                        if "recent_videos" not in creator and "recent_video_metrics_json" in creator:
+                            try:
+                                raw_json = creator["recent_video_metrics_json"]
+                                creator["recent_videos"] = json.loads(raw_json) if isinstance(raw_json, str) else []
+                            except Exception:
+                                creator["recent_videos"] = []
+                                
+                        # Compute historical cohorts on the fly from recent videos
+                        recent_vids = creator.get("recent_videos", [])
+                        u3m, u6m, u9m = [], [], []
+                        for vid in recent_vids:
+                            pub = vid.get("published_at")
+                            if not pub:
+                                continue
+                            try:
+                                dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                                age_days = max(0, (now_utc - dt).total_seconds() / 86400)
+                            except Exception:
+                                continue
+                            v_views = vid.get("views", 0) or 0
+                            if age_days <= 90:
+                                u3m.append(v_views)
+                            elif 90 < age_days <= 180:
+                                u6m.append(v_views)
+                            elif 180 < age_days <= 270:
+                                u9m.append(v_views)
+
+                        uploads_3m = len(u3m) if recent_vids else creator.get("uploads_3m", 0)
+                        uploads_6m = len(u6m) if recent_vids else creator.get("uploads_6m", 0)
+                        uploads_9m = len(u9m) if recent_vids else creator.get("uploads_9m", 0)
+                        avg_views_3m = round(sum(u3m) / len(u3m), 1) if u3m else creator.get("avg_views_3m", 0)
+                        avg_views_6m = round(sum(u6m) / len(u6m), 1) if u6m else creator.get("avg_views_6m", 0)
+                        avg_views_9m = round(sum(u9m) / len(u9m), 1) if u9m else creator.get("avg_views_9m", 0)
                         
                         platform = creator.get("platform", "YouTube")
                         analysis = score_and_draft_pitch(
@@ -160,6 +216,7 @@ if st.button("Load / refresh dataset", type="primary") or load_saved_on_open:
                             size_tier = "Large (>250k)"
 
                         results.append({
+                            "Avatar": creator.get("profile_image_url", ""),
                             "Platform": platform,
                             "Creator": creator["name"],
                             "Handle": creator.get("handle", ""),
@@ -168,15 +225,23 @@ if st.button("Load / refresh dataset", type="primary") or load_saved_on_open:
                             "Subscribers / followers": subscribers,
                             "Size tier": size_tier,
                             "Core target match": is_core_youtube or (platform == "TikTok" and subscribers is not None and subscribers >= 4000),
-                            # --- ADD THE NEW FIELDS HERE ---
                             "Commercial saturation": creator.get("commercial_saturation", "Unknown"),
-                            "Verified Email": "✅ Yes" if creator.get("public_contact_email") else "❌ No",
+                            "Verified Email": "Yes" if creator.get("public_contact_email") else "No",
                             "Channel total views": creator.get("channel_total_views"),
                             "Channel video count": creator.get("channel_video_count"),
                             "Avg video views": average_views,
                             "Median video views": creator.get("median_recent_video_views"),
                             "Views window (days)": creator.get("view_window_days"),
                             "Views sample size": creator.get("view_window_video_count"),
+                            
+                            # Added Historical Metrics (using correct local variables)
+                            "Uploads (Last 3m)": uploads_3m,
+                            "Uploads (3m-6m)": uploads_6m,
+                            "Uploads (6m-9m)": uploads_9m,
+                            "Avg Views (Last 3m)": avg_views_3m,
+                            "Avg Views (3m-6m)": avg_views_6m,
+                            "Avg Views (6m-9m)": avg_views_9m,
+                            
                             "Avg views / followers %": creator.get("avg_views_to_subscribers_pct"),
                             "Avg recent video likes": creator.get("avg_recent_video_likes"),
                             "Avg recent video comments": creator.get("avg_recent_video_comments"),
@@ -196,7 +261,7 @@ if st.button("Load / refresh dataset", type="primary") or load_saved_on_open:
                             "Niche confidence (% recent uploads matched)": creator.get("niche_match_ratio_pct"),
                             "Content niche": "; ".join(categories) or "Not enough recent-video evidence",
                             "Channel description": creator.get("description", ""),
-                            "Game titles": "; ".join(category.removeprefix("Game: ") for category in categories if category.startswith("Game: ")) or "; ".join(creator.get("game_titles", [])),
+                            "Game titles": "; ".join(category.removeprefix("Game: ") for category in categories if category.startswith("Game: ")) or "; ".join(str(g) for g in creator.get("game_titles", [])),
                             "Risk/review flags": "; ".join(creator.get("risk_flags", [])),
                             "Public contact email": creator.get("public_contact_email"),
                             "Public contact URL": creator.get("public_contact_url"),
@@ -237,16 +302,26 @@ if results:
     if df.empty:
         st.info(f"No creators match '{niche_query}'. Clear the search to show the full dataset.")
         st.stop()
-    filter_columns = st.columns(3)
-    country_filter = filter_columns[0].selectbox("Country", ["All countries", *EU_MARKETS.keys()])
-    size_filter = filter_columns[1].selectbox("Audience size", ["All sizes", "Core targets only", "Emerging YouTube (<50k)", "Large YouTube (>250k)"])
-    view_filter = filter_columns[2].selectbox("Average views", ["Any", "20k-100k core range", "Below 20k", "Above 100k"])
-    niche_filter = st.multiselect("Content niche", ["PC builds", "Gaming", "Hardware and benchmarks", "Tech reviews", "Gaming setups", "Streaming"])
-    game_filter = st.text_input("Game title contains", "")
-    contact_only = st.checkbox("Only profiles with a public contact route", value=False)
-    review_flags_only = st.checkbox("Only profiles with review flags", value=False)
-    sort_order = st.selectbox("Sort results", ["Country, then target fit", "Best target fit", "Highest average views"])
-
+    with st.container(border=True):
+        st.markdown("##### 🎛️ Refine & Filter Dataset")
+        f_col1, f_col2, f_col3 = st.columns(3)
+        country_filter = f_col1.selectbox("Country", ["All countries", *EU_MARKETS.keys()])
+        size_filter = f_col2.selectbox("Audience size", ["All sizes", "Core targets only", "Emerging YouTube (<50k)", "Large YouTube (>250k)"])
+        view_filter = f_col3.selectbox("Average views", ["Any", "20k-100k core range", "Below 20k", "Above 100k"])
+        
+        f_col4, f_col5 = st.columns(2)
+        niche_filter = f_col4.multiselect("Content niche", ["PC builds", "Gaming", "Hardware and benchmarks", "Tech reviews", "Gaming setups", "Streaming"])
+        game_filter = f_col5.text_input("Game title contains", "")
+        
+        f_col6, f_col7, f_col8 = st.columns([1, 1, 1.5])
+        with f_col6:
+            st.write("") # Spacing alignment
+            contact_only = st.checkbox("Has public contact route", value=False)
+        with f_col7:
+            st.write("") # Spacing alignment
+            review_flags_only = st.checkbox("Has review flags", value=False)
+        with f_col8:
+            sort_order = st.selectbox("Sort results", ["Country, then target fit", "Best target fit", "Highest average views"])
     if country_filter != "All countries":
         country_code = EU_MARKETS[country_filter][0]
         df = df[
@@ -301,8 +376,17 @@ if results:
     else:
         df = df.sort_values("Avg video views", ascending=False, na_position="last")
 
+    st.divider()
+    st.markdown("### Database Overview")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    kpi1.metric("Total Creators Displayed", len(df))
+    kpi2.metric("Core Target Fits", len(df[df["Core target match"]]))
+    kpi3.metric("Verified Emails Found", len(df[df["Verified Email"] == "Yes"]))
+    kpi4.metric("PC Build Channels", len(df[df["PC build match"]]))
+    st.write("")
+
     display_columns = [
-        "Platform", "Creator", "Handle", "Declared country",
+        "Avatar", "Platform", "Creator", "Handle", "Declared country",
         "Subscribers / followers", "Avg video views", "PC build match", "Gaming match",
         "Content niche", "Game titles", "Commercial saturation", "Verified Email", 
         "Trend status", "Risk/review flags", "Channel",
@@ -311,80 +395,114 @@ if results:
         df[display_columns],
         use_container_width=True,
         hide_index=True,
-        column_config={"Channel": st.column_config.LinkColumn("Channel")},
+        column_config={
+            "Avatar": st.column_config.ImageColumn("Avatar"),
+            "Channel": st.column_config.LinkColumn("Channel")
+        },
     )
 
-    selected_creator = st.selectbox("Review outreach for", df["Creator"].tolist())
+    st.divider()
+    selected_creator = st.selectbox("Select a creator to review and prepare outreach", df["Creator"].tolist())
     selected = df[df["Creator"] == selected_creator].iloc[0]
-    st.subheader(f"Outreach draft: {selected_creator}")
-    st.metric("Brand fit estimate", f"{selected['Fit score']}/100")
-    st.write(f"**Creator-declared country:** {selected['Declared country']}")
-    st.write(f"**Markets where discovered:** {selected['Markets discovered']}")
-    st.write(f"**Content niche:** {selected['Content niche']}")
-    if selected["Game titles"]:
-        st.write(f"**Games identified:** {selected['Game titles']}")
-    st.write(selected["Why it fits"])
-    if gemini_api_key:
-        recommendation_key = f"gemini_recommendation_{selected_creator}"
-        if st.button("Generate Collaboration Strategy", key=f"generate_{selected_creator}"):
-            try:
-                with st.spinner("Analyzing this creator's evidence and performance..."):
-                    st.session_state[recommendation_key] = generate_gemini_recommendation(
-                        gemini_api_key,
-                        {
-                            "name": selected["Creator"],
-                            "platform": selected["Platform"],
-                            "declared_country": selected["Declared country"],
-                            "markets_discovered": selected["Markets discovered"],
-                            "followers": selected["Subscribers / followers"],
-                            "average_video_views": selected["Avg video views"],
-                            "median_video_views": selected["Median video views"],
-                            "view_window_days": selected["Views window (days)"],
-                            "view_window_video_count": selected["Views sample size"],
-                            "engagement_rate_pct": selected["Recent engagement %"],
-                            "content_niches": selected["Content niche"],
-                            "game_titles": selected["Game titles"],
-                            "risk_flags": selected["Risk/review flags"],
-                            "recent_videos": selected["Recent videos"],
-                            "description": selected.get("Channel description", ""),
-                            "fit_reasoning": selected["Why it fits"],
-                        },
-                    )
-            except Exception as error:
-                st.error(f"Gemini recommendation failed ({type(error).__name__}). {gemini_error_hint(error)}")
-        if st.session_state.get(recommendation_key):
-            st.info(st.session_state[recommendation_key])
-    else:
-        st.caption("Add GEMINI_API_KEY to local Streamlit secrets to enable tailored recommendations.")
-    with st.expander("Outreach and contact fields"):
-        st.write("The outreach draft is an editable suggestion only; this app never sends it. Public contact email/URL fields are included only when present in the source data. Data source and provider snapshot date show where and when imported metrics came from.")
-    with st.expander("YouTube performance metrics"):
-        st.caption("Average and median views use the 30-day upload cohort when at least three uploads exist, otherwise the 90-day cohort. These are current lifetime views of videos published in that period. Observed view growth compares saved public counters, and requires a later snapshot at least seven days apart.")
-        metric_columns = st.columns(4)
-        metric_columns[0].metric("Channel lifetime views", f"{selected['Channel total views']:,}" if pd.notna(selected["Channel total views"]) else "N/A")
-        metric_columns[1].metric("Channel videos", f"{selected['Channel video count']:,}" if pd.notna(selected["Channel video count"]) else "N/A")
-        metric_columns[2].metric("Avg video views", f"{selected['Avg video views']:,.0f}" if pd.notna(selected["Avg video views"]) else "N/A")
-        metric_columns[3].metric("Recent engagement", f"{selected['Recent engagement %']:.2f}%" if pd.notna(selected["Recent engagement %"]) else "N/A")
-        st.write(f"Median views: {selected['Median video views'] if pd.notna(selected['Median video views']) else 'N/A'}")
-        st.write(f"Observed monthly video-view growth: {selected['Observed monthly video view growth'] if pd.notna(selected['Observed monthly video view growth']) else 'Needs another video snapshot'}")
-        st.write(f"Estimated yearly channel views at current run rate: {selected['Estimated yearly views (snapshot)'] if pd.notna(selected['Estimated yearly views (snapshot)']) else 'Needs another channel snapshot'}")
-        st.write(f"**Public contact:** {selected['Public contact email'] or selected['Public contact URL'] or 'Not provided in public profile description'}")
-        if selected["Risk/review flags"]:
-            st.warning(selected["Risk/review flags"])
-        for video in selected["Recent videos"]:
-            growth = video.get("observed_monthly_view_growth")
-            growth_text = f" | observed monthly growth: {growth:+,}" if growth is not None else ""
-            st.write(f"[{video['title']}]({video['url']}) | {video.get('views', 0):,} views | {video.get('likes', 0):,} likes | {video.get('comments', 0):,} comments | published {video.get('published_at', 'date unknown')}{growth_text}")
-    st.text_area(f"Draft for human review ({market})", selected["Outreach draft"], height=150)
-    with st.expander("Recent videos used for niche detection"):
-        if selected["Recent videos"]:
-            for video in selected["Recent videos"]:
-                st.write(f"[{video['title']}]({video['url']})")
-        else:
-            st.caption("No recent video data in this sample profile.")
     
-    st.caption("No message is sent. Verify the channel and contact method, personalize the draft, and get approval before outreach.")
+    st.markdown(f"### Profile: {selected_creator}")
+    
+    # Split into a clean 2-column dashboard layout
+    detail_left, detail_right = st.columns([1, 1.2], gap="large")
+    
+    with detail_left:
+        st.metric("Brand fit estimate", f"{selected['Fit score']}/100")
+        st.write(f"**Declared country:** {selected['Declared country']}")
+        st.write(f"**Discovered in:** {selected['Markets discovered']}")
+        st.write(f"**Content niche:** {selected['Content niche']}")
+        if selected["Game titles"]:
+            st.write(f"**Games identified:** {selected['Game titles']}")
+            
+        st.markdown("**Why it fits:**")
+        st.write(selected["Why it fits"])
+        
+        with st.expander("Historical View Consistency & Reach", expanded=True):
+            st.caption("Upload frequency and average view reach across 3, 6, and 9-month horizons.")
+            
+            st.write("**Upload Volume**")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("6-9 Months", selected.get("Uploads (6m-9m)", 0))
+            col2.metric("3-6 Months", selected.get("Uploads (3m-6m)", 0))
+            col3.metric("Last 3 Months", selected.get("Uploads (Last 3m)", 0))
 
+            st.write("**Average Views**")
+            col4, col5, col6 = st.columns(3)
+            col4.metric("6-9 Months", f"{selected.get('Avg Views (6m-9m)', 0):,.0f}")
+            col5.metric("3-6 Months", f"{selected.get('Avg Views (3m-6m)', 0):,.0f}")
+            col6.metric("Last 3 Months", f"{selected.get('Avg Views (Last 3m)', 0):,.0f}")
+
+    with detail_right:
+        st.text_area(f"Outreach Draft ({market})", selected["Outreach draft"], height=160)
+        st.caption("Editable suggestion. Verify the channel and contact method before outreach.")
+        
+        if gemini_api_key:
+            recommendation_key = f"gemini_recommendation_{selected_creator}"
+            if st.button("Generate Collaboration Strategy", type="primary", key=f"generate_{selected_creator}"):
+                try:
+                    with st.spinner("Analyzing this creator's evidence and performance..."):
+                        st.session_state[recommendation_key] = generate_gemini_recommendation(
+                            gemini_api_key,
+                            {
+                                "name": selected["Creator"],
+                                "platform": selected["Platform"],
+                                "declared_country": selected["Declared country"],
+                                "markets_discovered": selected["Markets discovered"],
+                                "followers": selected["Subscribers / followers"],
+                                "uploads_last_3m": selected.get("Uploads (Last 3m)", 0),
+                                "uploads_3m_to_6m": selected.get("Uploads (3m-6m)", 0),
+                                "uploads_6m_to_9m": selected.get("Uploads (6m-9m)", 0),
+                                "avg_views_last_3m": selected.get("Avg Views (Last 3m)", 0),
+                                "avg_views_3m_to_6m": selected.get("Avg Views (3m-6m)", 0),
+                                "avg_views_6m_to_9m": selected.get("Avg Views (6m-9m)", 0),
+                                "average_video_views": selected["Avg video views"],
+                                "median_video_views": selected["Median video views"],
+                                "view_window_days": selected["Views window (days)"],
+                                "view_window_video_count": selected["Views sample size"],
+                                "engagement_rate_pct": selected["Recent engagement %"],
+                                "content_niches": selected["Content niche"],
+                                "game_titles": selected["Game titles"],
+                                "risk_flags": selected["Risk/review flags"],
+                                "recent_videos": selected["Recent videos"],
+                                "description": selected.get("Channel description", ""),
+                                "fit_reasoning": selected["Why it fits"],
+                            },
+                        )
+                except Exception as error:
+                    st.error(f"Gemini recommendation failed ({type(error).__name__}). {gemini_error_hint(error)}")
+            if st.session_state.get(recommendation_key):
+                st.info(st.session_state[recommendation_key])
+        else:
+            st.caption("Add GEMINI_API_KEY to local Streamlit secrets to enable tailored recommendations.")
+            
+        with st.expander("Performance & Contact Details"):
+            metric_columns = st.columns(4)
+            metric_columns[0].metric("Lifetime views", f"{selected['Channel total views']:,}" if pd.notna(selected["Channel total views"]) else "N/A")
+            metric_columns[1].metric("Total videos", f"{selected['Channel video count']:,}" if pd.notna(selected["Channel video count"]) else "N/A")
+            metric_columns[2].metric("Avg views", f"{selected['Avg video views']:,.0f}" if pd.notna(selected["Avg video views"]) else "N/A")
+            metric_columns[3].metric("Engagement", f"{selected['Recent engagement %']:.2f}%" if pd.notna(selected["Recent engagement %"]) else "N/A")
+            
+            contact_email = selected['Public contact email']
+            contact_url = selected['Public contact URL']
+            contact_display = contact_email if pd.notna(contact_email) and contact_email else (contact_url if pd.notna(contact_url) and contact_url else "Not provided in public profile")
+            st.write(f"**Public contact:** {contact_display}")
+            
+            if selected["Risk/review flags"]:
+                st.warning(selected["Risk/review flags"])
+
+        with st.expander("Recent Evidence Videos"):
+            if selected["Recent videos"]:
+                for video in selected["Recent videos"]:
+                    st.write(f"[{video['title']}]({video.get('url', '#')}) | {video.get('views', 0):,} views")
+            else:
+                st.caption("No recent video data in this sample profile.")
+
+    st.divider()
+    
     export_columns = [
         "Platform", "Creator", "Handle", "Declared country", "Markets discovered",
         "Subscribers / followers", "Size tier", "Core target match", "Channel total views",
