@@ -12,7 +12,7 @@ from scoring import score_and_draft_pitch, generate_gemini_recommendation
 from metrics_history import save_and_measure_snapshots
 from platform_imports import TIKTOK_CSV_TEMPLATE, INSTAGRAM_CSV_TEMPLATE, load_provider_csv, load_saved_youtube_dataset
 
-st.set_page_config(layout="wide", page_title="Prenew Micro-Scout")
+st.set_page_config(layout="wide", page_title="Prenew Radar")
 
 # --- Popup Function ---
 @st.dialog("System Notice")
