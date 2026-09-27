@@ -117,6 +117,7 @@ def score_and_draft_pitch(gemini_api_key, creator_data, language="de"):
         "bg": "Bulgarian", "fi": "Finnish", "en": "English", "de": "German", 
         "sv": "Swedish", "nl": "Dutch", "fr": "French", "pl": "Polish", "es": "Spanish"
     }
+    
     requested_language = language_names.get(language, "English")
     recent_video_titles = [video.get("title", "") for video in creator_data.get("recent_videos", [])]
     

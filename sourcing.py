@@ -298,6 +298,7 @@ def _enrich_from_uploads(youtube, creators, progress_callback=None):
     for index, creator in enumerate(creators, start=1):
         uploads_playlist_id = creator.get("uploads_playlist_id")
         videos = []
+        
         if uploads_playlist_id:
             try:
                 response = youtube.playlistItems().list(

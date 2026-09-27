@@ -142,6 +142,7 @@ common_css = """
 </style>
 """
 
+
 st.markdown(css_theme + common_css, unsafe_allow_html=True)
 
 def configured_secret(name):
