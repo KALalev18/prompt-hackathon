@@ -22,7 +22,7 @@ def show_crm_popup():
 # --- UI Theme Showcase Toggle ---
 top_left, top_right = st.columns([3, 1])
 with top_left:
-    st.title("Prenew Creator Scout")
+    st.title("Prenew Radar")
     st.write("Find relevant creators, understand their content fit, and prepare outreach.")
 with top_right:
     theme_toggle = st.radio("UI Theme Showcase", ["Prenew Dark Mode", "Light Mode SaaS"], horizontal=True)
